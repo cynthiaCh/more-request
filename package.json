@@ -6,6 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "dependencies": {
+    "json-bigint": "^1.0.0"
+  },
   "author": "chenqingyue",
   "license": "ISC"
 }
