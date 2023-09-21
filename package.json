@@ -1,6 +1,6 @@
 {
   "name": "more-request",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "more than request",
   "main": "index.js",
   "scripts": {
