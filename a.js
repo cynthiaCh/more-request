@@ -1,4 +1,4 @@
-let a = [
+[
     {
       "reviewFactor": {
         "mindType": 0,
