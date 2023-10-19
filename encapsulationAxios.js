@@ -2,7 +2,7 @@
  * @Author: chenqingyue 
  * @Date: 2023-08-31 15:25:10
  * @LastEditors: chenqingyue 
- * @LastEditTime: 2023-08-31 15:40:02
+ * @LastEditTime: 2023-10-19 19:10:47
  * @FilePath: /epec-ui/src/package/eui-axios/encapsulationAxios.js
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -15,11 +15,7 @@ const encapsulationAxios = (axios) => {
   const JSONBigToString = JSONBig({ storeAsString: true });
   axios.defaults.transformResponse = (data) => {
     try {
-      const parseData = JSONBigToString.parse(data);
-      if (Object.prototype.toString.call(parseData) === '[object Object]') {
-        return { ...parseData };
-      }
-      return data;
+      return JSONBigToString.parse(data);
     } catch {
       return data;
     }
