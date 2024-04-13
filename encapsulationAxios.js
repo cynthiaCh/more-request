@@ -39,14 +39,16 @@ const encapsulationAxios = (axios) => {
     try {
       // 检查配置中的 preventRepeat 标志和请求方法是否需要防重复处理
       if (config.preventRepeat && SUPPORT_METHOD.has(config.method.toLowerCase())) {
-        const isRepeat = setPendingRequest(config);
-        if (isRepeat) {
+        const requestPromise = setPendingRequest(config);
+        if (requestPromise) {
           // 如果是重复请求，返回自定义的错误
           return Promise.reject({
             code: 'ERR_REPEAT_REQUEST',
             config,
             message: 'Request is repeated',
             name: 'EuiAxiosError',
+            useExistingPromise: true,
+            requestPromise,
             response: {
               status: 499,
               statusText: 'Repeat Request',
@@ -79,6 +81,11 @@ const encapsulationAxios = (axios) => {
     },
     (error) => {
       try {
+        // 请求失败处理重复请求的映射
+        if (error.useExistingPromise) {
+          // 如果错误是因为重复请求引起的，返回原有的 Promise
+          return error.requestPromise;
+        }
         // 对于请求出错的情况，同样清理记录
         if (error.config.preventRepeat) {
           finishPendingRequest(error.config);

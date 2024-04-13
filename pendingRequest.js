@@ -8,10 +8,12 @@
  * @Description: 用于防止重复发送相同的HTTP请求，包括延迟删除和状态管理
  */
 
-import { DEFAULT_REPEAT_CACHE_TIME } from './static';
+import axios from 'axios';
 
+import { DEFAULT_REPEAT_CACHE_TIME } from './static';
+const axiosInMap = axios.create();
 // 使用 Map 数据结构存储正在进行的请求
-const pendingRequest = new Map();
+const requestsMap = new Map();
 
 // 辅助函数，用于格式化请求中的数据部分，确保作为键值的一部分是字符串类型
 const formatString = (data) => (typeof data === 'string' ? data : JSON.stringify(data));
@@ -21,7 +23,11 @@ const getRequestKey = ({ method, url, params, data }) =>
   [method, url, formatString(params), formatString(data)].join('&');
 
 // 获取初始化请求记录对象，标记请求为正在进行和等待状态
-const getInitRequestRecord = () => ({ inProgress: true, waiting: true });
+const getInitRequestRecord = (requestPromise) => ({ 
+  inProgress: true, 
+  waiting: true,
+  requestPromise 
+});
 
 /**
  * 延迟删除请求记录的函数。
@@ -30,16 +36,16 @@ const getInitRequestRecord = () => ({ inProgress: true, waiting: true });
  */
 const delayRemovePendingRequest = (config) => {
   const requestKey = getRequestKey(config);
-  if (!pendingRequest.has(requestKey)) {
+  if (!requestsMap.has(requestKey)) {
     return;
   }
 
-  const requestRecord = pendingRequest.get(requestKey);
+  const requestRecord = requestsMap.get(requestKey);
 
   // 设置延时删除，时间由 config.repeatCacheTime 或默认值决定
   setTimeout(() => {
     if (!requestRecord.inProgress) {
-      pendingRequest.delete(requestKey);
+      requestsMap.delete(requestKey);
     } else {
       Object.assign(requestRecord, { waiting: false });
     }
@@ -53,14 +59,14 @@ const delayRemovePendingRequest = (config) => {
  */
 export const finishPendingRequest = (config) => {
   const requestKey = getRequestKey(config);
-  if (!pendingRequest.has(requestKey)) {
+  if (!requestsMap.has(requestKey)) {
     return;
   }
 
-  const requestRecord = pendingRequest.get(requestKey);
+  const requestRecord = requestsMap.get(requestKey);
 
   if (!requestRecord.waiting) {
-    pendingRequest.delete(requestKey);
+    requestsMap.delete(requestKey);
   } else {
     Object.assign(requestRecord, { inProgress: false });
   }
@@ -75,14 +81,16 @@ export const finishPendingRequest = (config) => {
  */
 export const setPendingRequest = (config) => {
   const requestKey = getRequestKey(config);
-  const requestRecord = pendingRequest.get(requestKey);
+  const requestRecord = requestsMap.get(requestKey);
 
   if (requestRecord) {
-    return true; // 请求已存在，表示重复请求
+    return requestRecord.requestPromise; // 请求已存在，表示重复请求
   }
 
   // 创建并记录新的请求状态
-  pendingRequest.set(requestKey, getInitRequestRecord());
+  // 如果请求不存在，将其加入映射并记录其 Promise
+  const requestPromise = () => axiosInMap(config);
+  requestsMap.set(requestKey, getInitRequestRecord(requestPromise));
 
   // 设置延时，以在必要时移除请求记录
   delayRemovePendingRequest(config);
