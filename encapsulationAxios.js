@@ -15,6 +15,34 @@ import { setPendingRequest, finishPendingRequest } from './pendingRequest';
 // 引入支持的 HTTP 方法集合
 import { SUPPORT_METHOD } from './static';
 
+// 实现一个发布订阅类
+class EventEmitter {
+  constructor() {
+    this.event = {}
+  }
+  // 注册事件
+  on(type, cbres, cbrej) {
+    if (!this.event[type]) {
+      this.event[type] = [[cbres, cbrej]]
+    } else {
+      this.event[type].push([cbres, cbrej])
+    }
+  }
+
+  // 触发事件
+  emit(type, res, ansType) {
+    if (!this.event[type]) return
+    this.event[type].forEach(cbArr => {
+      if (ansType === 'resolve') {
+        cbArr[0](res)
+      } else {
+        cbArr[1](res)
+      }
+    });
+  }
+}
+// 创建一个事件容器
+const ev = new EventEmitter();
 /**
  * 对 axios 实例进行封装，增加大数字处理和重复请求拦截功能
  * @param {Object} axios - 待封装的 axios 实例
@@ -35,25 +63,29 @@ const encapsulationAxios = (axios) => {
   };
 
   // 请求拦截器，用于防止重复请求
-  axios.interceptors.request.use((config) => {
+  axios.interceptors.request.use(async (config) => {
     try {
       // 检查配置中的 preventRepeat 标志和请求方法是否需要防重复处理
       if (config.preventRepeat && SUPPORT_METHOD.has(config.method.toLowerCase())) {
-        const requestPromise = setPendingRequest(config);
-        if (requestPromise) {
-          // 如果是重复请求，返回自定义的错误
-          return Promise.reject({
-            code: 'ERR_REPEAT_REQUEST',
-            config,
-            message: 'Request is repeated',
-            name: 'EuiAxiosError',
-            useExistingPromise: true,
-            requestPromise,
-            response: {
-              status: 499,
-              statusText: 'Repeat Request',
-            },
-          });
+        const requestKey = setPendingRequest(config);
+        if (requestKey) {
+          // 如果存在相同请求，挂起并等待原请求结果
+            let res = await new Promise((resolve, reject) => {
+              ev.on(requestKey, resolve, reject)
+            });
+            return Promise.reject({
+              type: 'limiteResSuccess',
+              code: 'ERR_REPEAT_REQUEST',
+              config,
+              message: 'Request is repeated',
+              name: 'EuiAxiosError',
+              useExistingPromise: true,
+              response: {
+                status: 499,
+                statusText: 'Repeat Request',
+              },
+              val: res
+            });
         }
       }
     } catch {
@@ -70,7 +102,7 @@ const encapsulationAxios = (axios) => {
       try {
         // 如果响应来自一个需要防重复处理的请求，清理其记录
         if (response.config.preventRepeat) {
-          finishPendingRequest(response.config);
+          finishPendingRequest(response, ev, 'resolve');
         }
       } catch {
         // 异常安全，出错时返回原始响应
@@ -81,14 +113,12 @@ const encapsulationAxios = (axios) => {
     },
     (error) => {
       try {
-        // 请求失败处理重复请求的映射
-        if (error.useExistingPromise) {
-          // 如果错误是因为重复请求引起的，返回原有的 Promise
-          return error.requestPromise;
+        if(error.type && error.type === 'limiteResSuccess') {
+          return Promise.resolve(error.val);
         }
         // 对于请求出错的情况，同样清理记录
         if (error.config.preventRepeat) {
-          finishPendingRequest(error.config);
+          finishPendingRequest(error, ev, 'reject');
         }
       } catch {
         // 异常安全，出错时继续抛出错误

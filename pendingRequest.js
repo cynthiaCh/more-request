@@ -57,8 +57,8 @@ const delayRemovePendingRequest = (config) => {
  * 如果请求在等待状态，仅标记为非进行中；如果不在等待状态，则删除记录。
  * @param {Object} config - 请求的配置对象
  */
-export const finishPendingRequest = (config) => {
-  const requestKey = getRequestKey(config);
+export const finishPendingRequest = (response, ev, flagName) => {
+  const requestKey = getRequestKey(response.config);
   if (!requestsMap.has(requestKey)) {
     return;
   }
@@ -66,6 +66,8 @@ export const finishPendingRequest = (config) => {
   const requestRecord = requestsMap.get(requestKey);
 
   if (!requestRecord.waiting) {
+    ev.emit(requestKey, response, flagName);
+    // 如果记录显示请求不在等待（可能已处理完毕或无需进一步等待），则从映射中删除该记录，清理资源。
     requestsMap.delete(requestKey);
   } else {
     Object.assign(requestRecord, { inProgress: false });
@@ -84,7 +86,7 @@ export const setPendingRequest = (config) => {
   const requestRecord = requestsMap.get(requestKey);
 
   if (requestRecord) {
-    return requestRecord.requestPromise; // 请求已存在，表示重复请求
+    return requestKey; // 请求已存在，表示重复请求
   }
 
   // 创建并记录新的请求状态
